@@ -1,0 +1,44 @@
+# Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Output
+output/
+*.csv
+*.json
+!requirements.txt
+!pytest.ini
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+.playwright/

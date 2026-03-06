@@ -1,214 +1,429 @@
-# OBIE 2.0 - OSINT Buyer Intent Engine
+# OBIE - Export Buyer Intent Engine
 
-**Automated B2B buyer discovery across tenders, trade boards, and social signals.**
-
----
-
-## What This Does
-
-OBIE scrapes **high-intent buyer leads** from 3 sources:
-
-| Source | Examples | Intent Level | Value |
-|--------|----------|--------------|-------|
-| **Tender Portals** | EU TED, UAE eProcurement, UN | 🔥 Critical | $10K-10M deals |
-| **B2B Trade Boards** | TradeKey, go4WorldBusiness, EC21 | 🔥 High | Active RFQs |
-| **Social Signals** | Reddit, LinkedIn, Twitter | ⚡ Medium | Real-time inquiries |
-
-### Output: Scored, Ranked Leads
-
-```
-S-Tier (200+ pts): Government tenders with budget + deadline <30 days
-A-Tier (120+ pts): B2B RFQs with quantity + destination specified
-B-Tier (60+ pts):  General buying inquiries
-C-Tier (<60 pts):  Passive interest / nurture
-```
+**Production-grade B2B buyer discovery, scoring, and outreach platform for exporters.**
 
 ---
 
-## Quick Start
+## 🎯 What This Does
 
-### 1. Install Dependencies
+OBIE helps exporters find **active import buyers** with high purchase intent by:
+
+1. **Ingesting** from multiple sources (tenders, B2B boards, trade signals)
+2. **Normalizing** into a canonical data model
+3. **Scoring** leads with explainable intent algorithms
+4. **Enriching** with contact details and verification
+5. **Deduplicating** across sources with entity resolution
+6. **Surfacing** hot buyers via dashboard, reports, and CRM integrations
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         OBIE Platform                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   B2B Boards │  │   Tenders    │  │ Trade Signals│          │
+│  │   Adapter    │  │   Adapter    │  │   Adapter    │          │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
+│         │                 │                 │                   │
+│         └─────────────────┴─────────────────┘                   │
+│                           │                                     │
+│                  ┌────────▼────────┐                            │
+│                  │  Ingestion Queue │ (Redis + Celery)          │
+│                  └────────┬────────┘                            │
+│                           │                                     │
+│         ┌─────────────────┼─────────────────┐                  │
+│         │                 │                 │                   │
+│  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐            │
+│  │  Normalize  │  │   Dedupe    │  │   Enrich    │            │
+│  │  Pipeline   │  │   Engine    │  │   Pipeline  │            │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘            │
+│         │                 │                 │                   │
+│         └─────────────────┼─────────────────┘                   │
+│                           │                                     │
+│                  ┌────────▼────────┐                            │
+│                  │  Intent Scorer  │ (Configurable weights)     │
+│                  └────────┬────────┘                            │
+│                           │                                     │
+│                  ┌────────▼────────┐                            │
+│                  │   PostgreSQL    │                            │
+│                  │   (Lead Store)  │                            │
+│                  └────────┬────────┘                            │
+│                           │                                     │
+│         ┌─────────────────┼─────────────────┐                  │
+│         │                 │                 │                   │
+│  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐            │
+│  │  FastAPI    │  │  Dashboard  │  │   Reports   │            │
+│  │   REST API  │  │   (React)   │  │   Engine    │            │
+│  └─────────────┘  └─────────────┘  └─────────────┘            │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📁 Repository Structure
+
+```
+obie/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py              # FastAPI app
+│   │   ├── config.py            # Settings, env vars
+│   │   ├── database.py          # DB connection, sessions
+│   │   │
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py          # SQLAlchemy base
+│   │   │   ├── buyer.py         # BuyerEntity
+│   │   │   ├── opportunity.py   # Opportunity
+│   │   │   ├── contact.py       # Contact
+│   │   │   ├── intent.py        # IntentScore
+│   │   │   └── source.py        # Source, SourceHealth
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── buyer.py         # Pydantic schemas
+│   │   │   ├── opportunity.py
+│   │   │   ├── contact.py
+│   │   │   └── api.py           # Request/Response schemas
+│   │   │
+│   │   ├── adapters/
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py          # SourceAdapter interface
+│   │   │   ├── b2b_adapter.py   # B2B boards (TradeKey, etc.)
+│   │   │   ├── tender_adapter.py# Tenders (TED, SAM.gov)
+│   │   │   └── signals_adapter.py# Social/trade signals
+│   │   │
+│   │   ├── pipelines/
+│   │   │   ├── __init__.py
+│   │   │   ├── ingestion.py     # Queue ingestion
+│   │   │   ├── normalization.py # Canonical model
+│   │   │   ├── dedupe.py        # Entity resolution
+│   │   │   ├── enrichment.py    # Contact enrichment
+│   │   │   └── scoring.py       # Intent scoring
+│   │   │
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── v1/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── leads.py     # Lead CRUD
+│   │   │   │   ├── buyers.py    # Buyer entities
+│   │   │   │   ├── sources.py   # Source management
+│   │   │   │   ├── reports.py   # Reports, exports
+│   │   │   │   └── webhooks.py  # CRM webhooks
+│   │   │   └── deps.py          # Dependencies
+│   │   │
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── lead_service.py  # Lead business logic
+│   │   │   ├── crm_service.py   # CRM integrations
+│   │   │   └── email_service.py # Email verification
+│   │   │
+│   │   ├── tasks/
+│   │   │   ├── __init__.py
+│   │   │   ├── celery_app.py    # Celery config
+│   │   │   ├── ingestion_tasks.py# Async ingestion
+│   │   │   └── enrichment_tasks.py# Async enrichment
+│   │   │
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── logging.py       # Structured logging
+│   │       ├── metrics.py       # Prometheus metrics
+│   │       └── helpers.py       # Utilities
+│   │
+│   ├── alembic/
+│   │   ├── versions/            # DB migrations
+│   │   └── env.py
+│   │
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── conftest.py          # Test fixtures
+│   │   ├── unit/
+│   │   ├── integration/
+│   │   └── e2e/
+│   │
+│   ├── requirements.txt
+│   ├── requirements-dev.txt
+│   ├── Dockerfile
+│   └── pytest.ini
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── LeadFeed.tsx
+│   │   │   ├── LeadDetail.tsx
+│   │   │   ├── SourceHealth.tsx
+│   │   │   └── ...
+│   │   ├── pages/
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Leads.tsx
+│   │   │   ├── Reports.tsx
+│   │   │   └── Settings.tsx
+│   │   ├── api/                 # API client
+│   │   ├── store/               # Redux/Zustand
+│   │   └── App.tsx
+│   │
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── Dockerfile
+│
+├── docker-compose.yml           # Local dev stack
+├── docker-compose.prod.yml      # Production stack
+├── Makefile                     # Common commands
+├── .env.example                 # Environment template
+└── README.md                    # This file
+```
+
+---
+
+## 🚀 Quick Start (Development)
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Docker + Docker Compose
+- Redis (for Celery)
+- PostgreSQL 15+
+
+### 1. Clone & Setup
 
 ```bash
+git clone https://github.com/joshiljainn/OBIE.git
+cd OBIE
+
+# Backend
+cd backend
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
-playwright install  # Install browser binaries
+
+# Frontend
+cd ../frontend
+npm install
 ```
 
-### 2. Set API Key (Optional - for LLM enrichment)
+### 2. Environment Variables
 
 ```bash
-export GROQ_API_KEY="your-groq-api-key"  # Get free at https://console.groq.com
+# Copy example
+cp .env.example .env
+
+# Edit with your values:
+# - DATABASE_URL
+# - REDIS_URL
+# - GROQ_API_KEY (for LLM enrichment)
+# - SECRET_KEY
 ```
 
-### 3. Run the Pipeline
+### 3. Start Services (Docker)
 
 ```bash
-# Scrape all sources for your products
-python main.py --products "plywood,ceramic tiles,steel" --all
+# From project root
+docker-compose up -d  # Starts Postgres, Redis
 
-# Scrape only tenders (highest value)
-python main.py --products "plywood" --tenders --days 30
+# Run migrations
+cd backend
+alembic upgrade head
 
-# Scrape only B2B boards
-python main.py --products "textiles" --b2b --pages 5
+# Start backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# Show browser (debug mode)
-python main.py --products "plywood" --all --no-headless
+# Start Celery workers
+celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
+
+# Start frontend (in another terminal)
+cd frontend
+npm run dev
 ```
 
-### 4. Check Results
+### 4. Access
 
-```
-output/
-├── all_leads_scored_20260305_143022.csv    # Unified, ranked leads
-├── tender_leads_20260305_143022.csv        # Tender-specific
-├── b2b_leads_20260305_143022.csv           # B2B-specific
-├── social_leads_20260305_143022.csv        # Social-specific
-└── summary_20260305_143022.json            # Stats + top leads
-```
+- **Dashboard:** http://localhost:3000
+- **API Docs:** http://localhost:8000/docs
+- **Admin (future):** http://localhost:8000/admin
 
 ---
 
-## Lead Scoring System
+## 🔌 Source Adapters
 
-Leads are scored automatically based on:
+### Built-in Adapters (v1)
 
-| Factor | Points |
-|--------|--------|
-| **Source Type** | |
-| Tender portal | +100 |
-| B2B board | +50 |
-| Social signal | +20 |
-| **Modifiers** | |
-| Budget specified | +50 |
-| Deadline specified | +30 |
-| Quantity specified | +25 |
-| Destination country | +20 |
-| Contact info available | +30 |
-| Deadline <30 days (urgent) | +40 |
-| **Multiplier** | |
-| Government buyer | 1.5x |
+| Adapter | Sources | Status |
+|---------|---------|--------|
+| B2B Boards | TradeKey, go4WorldBusiness, EC21 | 🟡 Beta |
+| Tenders | EU TED, SAM.gov, UN GM | 🟡 Beta |
+| Trade Signals | Reddit, LinkedIn (public) | 🔴 Limited |
+
+### Add a Custom Adapter
+
+```python
+from app.adapters.base import SourceAdapter, LeadSignal
+
+class MyCustomAdapter(SourceAdapter):
+    SOURCE_NAME = "my_custom_source"
+    
+    async def fetch(self, config: dict) -> list[LeadSignal]:
+        # Implement fetching logic
+        pass
+    
+    async def parse(self, raw: dict) -> list[LeadSignal]:
+        # Implement parsing logic
+        pass
+```
+
+Register in `app/adapters/__init__.py`.
 
 ---
 
-## Architecture
+## 📊 Intent Scoring
 
+Scores are calculated with **configurable weights**:
+
+```yaml
+# config/scoring_profiles.yaml
+textile_exporter:
+  weights:
+    recency: 0.25
+    product_fit: 0.20
+    demand_specificity: 0.20
+    buyer_reliability: 0.15
+    contactability: 0.10
+    urgency: 0.10
+  
+  thresholds:
+    S: 85
+    A: 70
+    B: 50
+    C: 0
 ```
-main.py (Orchestrator)
-│
-├── scrapers/
-│   ├── b2b_scraper.py    → TradeKey, go4WorldBusiness, EC21
-│   ├── tender_scraper.py → EU TED, UAE eProcurement, UN
-│   └── social_scraper.py → Reddit, LinkedIn, Twitter
-│
-├── models.py             → Unified BuyerLead schema
-├── validator.py          → Email verification (SMTP ping)
-└── verifier.py           → LLM company classification (legacy)
-```
+
+**Score breakdown is stored** for every lead (explainable AI).
 
 ---
 
-## CLI Reference
+## 📈 Key Metrics
+
+Track these in the **Source Health** dashboard:
+
+| Metric | Description | Target |
+|--------|-------------|--------|
+| Source Success Rate | % successful fetches | >95% |
+| Parse Yield Rate | % raw → valid leads | >60% |
+| Valid Lead Rate | % passing quality checks | >70% |
+| Duplicate Rate | % deduped leads | <30% |
+| Verification Pass Rate | % emails verified | >50% |
+| Lead-to-Meeting Rate | Manual input | Track weekly |
+
+---
+
+## 🔐 Compliance & Ethics
+
+- **GDPR-aware:** Only B2B contact data, deletion API available
+- **ToS Respect:** Robots.txt honored, rate limiting enforced
+- **No Private Data:** Public sources only, no login bypassing
+- **Data Retention:** Configurable (default: 2 years)
+
+---
+
+## 🧪 Testing
 
 ```bash
-python main.py --products "PRODUCT1,PRODUCT2" [OPTIONS]
+# Unit tests
+pytest tests/unit
 
-Required:
-  --products TEXT         Comma-separated products (e.g., "plywood,steel")
+# Integration tests (requires Docker)
+docker-compose -f docker-compose.test.yml up --abort-on-container-exit
 
-Source Selection (default: all):
-  --b2b                   Scrape B2B boards only
-  --tenders               Scrape tender portals only
-  --social                Scrape social signals only
-  --all                   Scrape all sources (default)
-
-Options:
-  --days INT              Days back for tenders (default: 30)
-  --pages INT             Pages per B2B site (default: 3)
-  --output-dir PATH       Output directory (default: output)
-  --no-headless           Show browser windows (debug)
-  --help                  Show this message
+# E2E tests
+pytest tests/e2e --browser=chromium
 ```
 
 ---
 
-## Example Output (CSV)
+## 📦 Deployment
 
-```csv
-source_type,source_url,intent_level,product,quantity,destination_country,budget,deadline,buyer_name,lead_score,lead_tier
-tender,https://ted.europa.eu/TED/notice/123,critical,Construction Materials,500 tons,UAE,AED 2,500,000,15/04/2026,UAE Ministry of Infrastructure,280,S
-b2b_board,https://www.tradekey.com/buying-leads/456,high,Plywood Sheets,1000 units,Pakistan,,30/03/2026,Al-Rashid Trading,145,A
-social,https://reddit.com/r/procurement/comments/789,medium,Looking for ceramic tile suppliers,,,,,u/DubaiBuilder,45,C
-```
-
----
-
-## Advanced: Email Validation Pipeline
-
-After scraping, validate contact emails:
+### Production Stack
 
 ```bash
-# Run email verification on scraped leads
-python validator.py
+# Build images
+docker-compose -f docker-compose.prod.yml build
+
+# Deploy
+docker-compose -f docker-compose.prod.yml up -d
+
+# Run migrations
+docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
 ```
 
-This will:
-1. Scrape contact pages for each lead's website
-2. Extract email addresses
-3. Run SMTP pings to verify deliverability
-4. Output to `final_leads.csv` with verification status
-
----
-
-## Scheduling (Production Use)
-
-Run OBIE daily with cron:
+### Environment Variables (Production)
 
 ```bash
-# Edit crontab
-crontab -e
-
-# Add daily run at 6 AM
-0 6 * * * cd "/path/to/OBIE" && python main.py --products "plywood,ceramic tiles" --all >> output/daily.log 2>&1
+DATABASE_URL=postgresql://user:pass@db:5432/obie
+REDIS_URL=redis://redis:6379/0
+SECRET_KEY=<32-char-random>
+GROQ_API_KEY=<your-key>
+ENV=production
+LOG_LEVEL=INFO
 ```
 
 ---
 
-## Troubleshooting
+## 🎯 Roadmap
 
-### CAPTCHA / Blocking Issues
-- Use `--no-headless` to see what's happening
-- Reduce request frequency (increase delays in scraper code)
-- Use residential proxies for large-scale scraping
+### M1: Foundation (Week 1)
+- [x] Architecture design
+- [ ] Schema + migrations
+- [ ] Adapter interface + 1 working adapter
+- [ ] Scoring v1
+- [ ] Dashboard basic
 
-### No Results Found
-- Try different product keywords (more specific)
-- Increase `--pages` for B2B scraping
-- Check if target sites are accessible
+### M2: Quality (Week 2)
+- [ ] Dedupe/entity resolution
+- [ ] Enrichment + verification
+- [ ] Source health metrics
+- [ ] Reports engine
 
-### Email Validation Fails
-- Some domains block SMTP pings (catch-all servers)
-- MX records may be temporarily unavailable
+### M3: Commercial (Week 3)
+- [ ] CRM exports (HubSpot, Pipedrive)
+- [ ] Outreach assist (email drafts)
+- [ ] User scoring profiles
+- [ ] Role-based access
+
+### M4: Optimization (Week 4)
+- [ ] Precision/recall tuning
+- [ ] Performance hardening
+- [ ] Documentation
+- [ ] Pilot onboarding
 
 ---
 
-## Legal & Ethics
+## 🤝 Contributing
 
-- **Respect robots.txt** and site Terms of Service
-- **Rate limiting** is built-in to avoid overwhelming servers
-- **Public data only** - no login bypassing or private data access
-- **GDPR compliance** - only scrape business contact information
+1. Fork the repo
+2. Create a feature branch
+3. Write tests
+4. Submit a PR
 
 ---
 
-## License
+## 📄 License
 
 MIT License - See LICENSE file
 
 ---
 
-## Support
+## 📞 Support
 
 For issues, feature requests, or questions:
 - Open an issue on GitHub
-- Contact: [your-email@example.com]
+- Email: [your-email@example.com]
+
+---
+
+**Built for exporters who need reliable, actionable buyer intelligence—not just noisy lead lists.**

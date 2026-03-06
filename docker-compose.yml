@@ -1,0 +1,127 @@
+# Docker Compose - Development
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: obie-db
+    environment:
+      POSTGRES_USER: obie
+      POSTGRES_PASSWORD: obie_password
+      POSTGRES_DB: obie
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U obie"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────
+  # Redis (Celery Broker)
+  # ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: obie-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────
+  # Backend API
+  # ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: obie-backend
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://obie:obie_password@db:5432/obie
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+      - ./backend/logs:/app/logs
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+  # ─────────────────────────────────────────────────────────
+  # Celery Worker
+  # ─────────────────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: obie-celery
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://obie:obie_password@db:5432/obie
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - redis
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+
+  # ─────────────────────────────────────────────────────────
+  # Celery Beat (Scheduler)
+  # ─────────────────────────────────────────────────────────
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name:obie-beat
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://obie:obie_password@db:5432/obie
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      - redis
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+
+  # ─────────────────────────────────────────────────────────
+  # Flower (Celery Monitor) - Optional
+  # ─────────────────────────────────────────────────────────
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: obie-flower
+    env_file:
+      - backend/.env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    command: celery -A app.tasks.celery_app flower --port=5555
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: obie-network
