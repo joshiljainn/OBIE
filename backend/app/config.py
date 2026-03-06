@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
     celery_task_serializer: str = "json"
-    celery_accept_content: List[str] = ["json"]
+    celery_accept_content: str = "json"  # Changed from List to str
     celery_result_serializer: str = "json"
     celery_timezone: str = "UTC"
     

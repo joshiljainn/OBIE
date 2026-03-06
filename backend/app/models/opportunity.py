@@ -5,7 +5,7 @@ Represents a specific buying opportunity/requirement from a buyer.
 This is the core "lead" that gets scored and tracked.
 """
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     Boolean,

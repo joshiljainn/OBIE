@@ -20,8 +20,9 @@ from app.config import settings
 # Engine Configuration
 # ─────────────────────────────────────────────────────────────
 
+# Use asyncpg for async operations
 engine = create_async_engine(
-    settings.database_url,
+    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
     pool_size=settings.database_pool_size,
     max_overflow=settings.database_max_overflow,
     pool_pre_ping=True,  # Enable connection health checks
